@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdexcept>
+#include <variant>
 
 #include "compact_elias_fano.hpp"
 #include "compact_ranked_bitvector.hpp"
@@ -84,17 +85,17 @@ namespace ds2i {
                 m_type = best_compressor(params, universe, n).first;
                 switch (m_type) {
                 case elias_fano:
-                    m_ef_enumerator = compact_elias_fano::enumerator(bv, offset,
+                    m_enumerator = compact_elias_fano::enumerator(bv, offset,
                                                                      universe, n,
                                                                      params);
                     break;
                 case ranked_bitvector:
-                    m_rb_enumerator = compact_ranked_bitvector::enumerator(bv, offset,
+                    m_enumerator = compact_ranked_bitvector::enumerator(bv, offset,
                                                                            universe, n,
                                                                            params);
                     break;
                 case all_ones:
-                    m_ao_enumerator = all_ones_sequence::enumerator(bv, offset,
+                    m_enumerator = all_ones_sequence::enumerator(bv, offset,
                                                                     universe, n,
                                                                     params);
                     break;
@@ -103,41 +104,42 @@ namespace ds2i {
                 }
             }
 
-#define ENUMERATOR_METHOD(RETURN_TYPE, METHOD, FORMALS, ACTUALS)    \
-            RETURN_TYPE DS2I_FLATTEN_FUNC METHOD FORMALS              \
-            {                                                       \
-                switch (__builtin_expect(m_type, elias_fano)) {     \
-                case elias_fano:                                    \
-                    return m_ef_enumerator.METHOD ACTUALS;          \
-                case ranked_bitvector:                              \
-                    return m_rb_enumerator.METHOD ACTUALS;          \
-                case all_ones:                                      \
-                    return m_ao_enumerator.METHOD ACTUALS;          \
-                default:                                            \
-                    assert(false);                                  \
-                    __builtin_unreachable();                        \
-                }                                                   \
-            }                                                       \
-            /**/
+            value_type DS2I_FLATTEN_FUNC next_geq(uint64_t lower_bound){
+              return std::visit(
+                  [&lower_bound](auto&& e) { return e.next_geq(lower_bound); },
+                  m_enumerator);
+            }
 
-            // semicolons are redundant but they are needed to get emacs to
-            // align the lines properly
-            ENUMERATOR_METHOD(value_type, move, (uint64_t position), (position));
-            ENUMERATOR_METHOD(value_type, next_geq, (uint64_t lower_bound), (lower_bound));
-            ENUMERATOR_METHOD(value_type, next, (), ());
-            ENUMERATOR_METHOD(uint64_t, size, () const, ());
-            ENUMERATOR_METHOD(uint64_t, prev_value, () const, ());
+            value_type DS2I_FLATTEN_FUNC move(uint64_t position){
+                return std::visit(
+                  [&position](auto&& e) { return e.move(position); },
+                  m_enumerator);
+            }
 
-#undef ENUMERATOR_METHOD
-#undef ENUMERATOR_VOID_METHOD
+            value_type DS2I_FLATTEN_FUNC next(){
+              return std::visit(
+                  [](auto&& e) { return e.next(); },
+                  m_enumerator);
+            }
+
+            uint64_t DS2I_FLATTEN_FUNC size() const {
+              return std::visit(
+                  [](auto&& e) { return e.size(); },
+                  m_enumerator);
+            }
+
+            uint64_t DS2I_FLATTEN_FUNC prev_value() const {
+              return std::visit(
+                  [](auto&& e) { return e.prev_value(); },
+                  m_enumerator);
+            }
 
         private:
             index_type m_type;
-            union {
-                compact_elias_fano::enumerator m_ef_enumerator;
-                compact_ranked_bitvector::enumerator m_rb_enumerator;
-                all_ones_sequence::enumerator m_ao_enumerator;
-            };
+            std::variant<compact_elias_fano::enumerator,
+                         compact_ranked_bitvector::enumerator,
+                         all_ones_sequence::enumerator>
+                m_enumerator;
         };
     };
 }
