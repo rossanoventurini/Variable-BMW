@@ -15,28 +15,28 @@ namespace ds2i {
             elias_fano = 0,
             ranked_bitvector = 1,
             all_ones = 2,
-
-            index_types = 3
         };
+        using Cost = uint64_t;
+        using CompressionCost = std::pair<index_type, Cost>;
 
-        static const uint64_t type_bits = 1; // all_ones is implicit
+        static DS2I_FLATTEN_FUNC CompressionCost best_compressor(
+            global_parameters const &params, uint64_t universe, uint64_t n) {
+          Cost ef_cost = compact_elias_fano::bitsize(params, universe, n);
+          Cost rb_cost = compact_ranked_bitvector::bitsize(params, universe, n);
+          Cost aos_cost = all_ones_sequence::bitsize(params, universe, n);
+          std::vector<CompressionCost> type_cost = {{elias_fano, ef_cost},
+                                                    {ranked_bitvector, rb_cost},
+                                                    {all_ones, aos_cost}};
+          return *std::min_element(type_cost.begin(), type_cost.end(),
+                                   [](const auto &lhs, const auto &rhs) {
+                                     return lhs.second < rhs.second;
+                                   });
+        }
 
         static DS2I_FLATTEN_FUNC uint64_t
         bitsize(global_parameters const& params, uint64_t universe, uint64_t n)
         {
-            uint64_t best_cost = all_ones_sequence::bitsize(params, universe, n);
-
-            uint64_t ef_cost = compact_elias_fano::bitsize(params, universe, n) + type_bits;
-            if (ef_cost < best_cost) {
-                best_cost = ef_cost;
-            }
-
-            uint64_t rb_cost = compact_ranked_bitvector::bitsize(params, universe, n) + type_bits;
-            if (rb_cost < best_cost) {
-                best_cost = rb_cost;
-            }
-
-            return best_cost;
+            return best_compressor(params, universe, n).second;
         }
 
         template <typename Iterator>
@@ -45,24 +45,7 @@ namespace ds2i {
                           uint64_t universe, uint64_t n,
                           global_parameters const& params)
         {
-            uint64_t best_cost = all_ones_sequence::bitsize(params, universe, n);
-            int best_type = all_ones;
-
-            if (best_cost) {
-                uint64_t ef_cost = compact_elias_fano::bitsize(params, universe, n) + type_bits;
-                if (ef_cost < best_cost) {
-                    best_cost = ef_cost;
-                    best_type = elias_fano;
-                }
-
-                uint64_t rb_cost = compact_ranked_bitvector::bitsize(params, universe, n) + type_bits;
-                if (rb_cost < best_cost) {
-                    best_cost = rb_cost;
-                    best_type = ranked_bitvector;
-                }
-
-                bvb.append_bits(best_type, type_bits);
-            }
+            int best_type = best_compressor(params, universe, n).first;
 
 
             switch (best_type) {
@@ -98,26 +81,20 @@ namespace ds2i {
                        uint64_t universe, uint64_t n,
                        global_parameters const& params)
             {
-                if (all_ones_sequence::bitsize(params, universe, n) == 0) {
-                    m_type = all_ones;
-                } else {
-                    m_type = index_type(bv.get_word56(offset)
-                                        & ((uint64_t(1) << type_bits) - 1));
-                }
-
+                m_type = best_compressor(params, universe, n).first;
                 switch (m_type) {
                 case elias_fano:
-                    m_ef_enumerator = compact_elias_fano::enumerator(bv, offset + type_bits,
+                    m_ef_enumerator = compact_elias_fano::enumerator(bv, offset,
                                                                      universe, n,
                                                                      params);
                     break;
                 case ranked_bitvector:
-                    m_rb_enumerator = compact_ranked_bitvector::enumerator(bv, offset + type_bits,
+                    m_rb_enumerator = compact_ranked_bitvector::enumerator(bv, offset,
                                                                            universe, n,
                                                                            params);
                     break;
                 case all_ones:
-                    m_ao_enumerator = all_ones_sequence::enumerator(bv, offset + type_bits,
+                    m_ao_enumerator = all_ones_sequence::enumerator(bv, offset,
                                                                     universe, n,
                                                                     params);
                     break;
