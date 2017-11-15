@@ -1,12 +1,12 @@
 #pragma once
 
 #include <stdexcept>
-#include <variant>
 
 #include "compact_elias_fano.hpp"
 #include "compact_ranked_bitvector.hpp"
 #include "all_ones_sequence.hpp"
 #include "global_parameters.hpp"
+#include "variant.hpp"
 
 namespace ds2i {
 
@@ -105,38 +105,38 @@ namespace ds2i {
             }
 
             value_type DS2I_FLATTEN_FUNC next_geq(uint64_t lower_bound){
-              return std::visit(
+              return mpark::visit(
                   [&lower_bound](auto&& e) { return e.next_geq(lower_bound); },
                   m_enumerator);
             }
 
             value_type DS2I_FLATTEN_FUNC move(uint64_t position){
-                return std::visit(
+                return mpark::visit(
                   [&position](auto&& e) { return e.move(position); },
                   m_enumerator);
             }
 
             value_type DS2I_FLATTEN_FUNC next(){
-              return std::visit(
+              return mpark::visit(
                   [](auto&& e) { return e.next(); },
                   m_enumerator);
             }
 
             uint64_t DS2I_FLATTEN_FUNC size() const {
-              return std::visit(
+              return mpark::visit(
                   [](auto&& e) { return e.size(); },
                   m_enumerator);
             }
 
             uint64_t DS2I_FLATTEN_FUNC prev_value() const {
-              return std::visit(
+              return mpark::visit(
                   [](auto&& e) { return e.prev_value(); },
                   m_enumerator);
             }
 
         private:
             index_type m_type;
-            std::variant<compact_elias_fano::enumerator,
+            mpark::variant<compact_elias_fano::enumerator,
                          compact_ranked_bitvector::enumerator,
                          all_ones_sequence::enumerator>
                 m_enumerator;
